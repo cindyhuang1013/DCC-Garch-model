@@ -1,8 +1,3 @@
----
-title: DCC_README
-
----
-
 Time Series Analysis with VAR-DCC-GARCH Modeling
 ---
 
