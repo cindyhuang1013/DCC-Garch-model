@@ -14,7 +14,6 @@ library(ggplot2)
 
 
 #### Read data and data processing ####
-#The first column is time and the other are petrochemical products daily price
 price <- read.xlsx("data.xlsx")
 
 
