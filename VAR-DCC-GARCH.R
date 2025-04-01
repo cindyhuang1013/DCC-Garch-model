@@ -20,7 +20,7 @@ Bitcoin = read.csv(file.path(workpath, "data", "bitcoin.csv"))
 Ethereum = read.csv(file.path(workpath, "data", "Ethereum.csv"))
 View(Binance)
 
-#### Extract 'Close' and 'Date' Column  (three dataset has the same Date range)
+#### Extract 'Close' and 'Date' columns (all three datasets have the same date range) 
 Binance = Binance[, c("Date", "Close")]
 Bitcoin = Bitcoin$Close
 Ethereum = Ethereum$Close
@@ -29,22 +29,17 @@ df = data.frame(Date = Binance$Date,
                 Bitcoin_Close = Bitcoin, 
                 Ethereum_Close = Ethereum)
 
-#transform to Date format
+#### Convert the 'Date' column to Date format 
 df$Date = as.Date(df$Date)
 
-#transform to time series data (daily data frequency = 365)
-#for(i in 2:ncol(price)){
-#  price[,i]=ts(price[,i],start=c(2011,1,1),frequency = 365)
-#}
-
 #### Missing Values Imputation ####
-## Checking if there are missing values
+# Checking if there are missing values
 statsNA(df$Binance_Close)
 statsNA(df$Bitcoin_Close)
 statsNA(df$Ethereum_Close)
 
 
-#### Get log return series ####
+#### Compute log return series ####
 log_diff_df = data.frame(Date = df$Date[-1])
 for (i in 2:ncol(df)){
   col_name <- colnames(df)[i]
@@ -53,7 +48,7 @@ for (i in 2:ncol(df)){
 }
 View(log_diff_df)
 
-#### descriptive data ####
+#### Descriptive data ####
 des = function(x){
   mu = mean(x)
   max = max(x)
@@ -74,26 +69,26 @@ for (i in 2:ncol(log_diff_df)){
 }
 desdata
 
-#### correlation matrix ####
+#### Compute correlation matrix ####
 cormatrix = cor(log_diff_df[,c(2:4)])
 cormatrix
 
-#### check stationary ####
+#### Test for stationarity ####
 adf.test(log_diff_df[,2]) # stationary
 adf.test(log_diff_df[,3]) # stationary
 adf.test(log_diff_df[,4]) # stationary
 
-#### check Arch effect ####
+#### Test for ARCH effect ####
 at = scale(log_diff_df[,c(2:4)],center = T,scale = F)  #remove sample means
 MarchTest(at)
 
-#### Implement VAR model (choose order) ####
+#### Implement VAR model (select order) ####
 VARselect(log_diff_df[,c(2:4)] , lag.max = 25) 
 fit=vars::VAR(log_diff_df[,c(2:4)],p=1)
 stargazer(fit[["varresult"]],type="text",out = "fit_VAR.html")
 summary(fit)
 
-#### VAR-DCC-GARCH model ####
+#### Fit VAR-DCC-GARCH model ####
 spec1 <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
                     mean.model = list(armaOrder = c(1, 1)),distribution.model = "norm")
 mspec1 <- multispec(replicate(3,spec1))
@@ -101,17 +96,32 @@ modelspec1 = dccspec(uspec = mspec1,VAR = TRUE, lag = 1, dccOrder = c(1,1), dist
 modelfit_all <- dccfit(modelspec1, data = log_diff_df[,c(2:4)])
 modelfit_all
 
-modelfit_all@model[["varcoef"]] #get VAR coefficient
+modelfit_all@model[["varcoef"]] #get VAR coefficients
 
-#### plot the result ####
-## covariance plot ##
-dim(rcov(modelfit_all))
+
+#### Plot the result ####
+## Covariance plot ##
 plot(rcov(modelfit_all)[1,2,], type = 'l', main = 'Binance Coin and Bitcoin covariance', 
      xlab = 'Time', ylab = 'Covariance',xaxt = 'n')
 axis(side = 1, at = c(1,277,seq(642,1738,365)),labels = seq(2020,2025,1))
 
-## correlation ##
+## Correlation plot ##
 plot(rcor(modelfit_all)[1,2,], type = 'l', main = 'Binance Coin and Bitcoin correlation', 
      xlab = 'Time', ylab = 'correlation',xaxt = 'n')
 axis(side = 1, at = c(1,277,seq(642,1738,365)),labels = seq(2020,2025,1))
 
+
+
+#### Extract and store covariance data (individual assets, not pairwise) ####
+dim(rcov(modelfit_all))
+cov_df = data.frame(log_diff_df$Date)
+BNB = rcov(modelfit_all)[1,1,]
+BTC = rcov(modelfit_all)[2,2,]
+ETH = rcov(modelfit_all)[3,3,]
+cov_df$BNB = BNB
+cov_df$BTC = BTC
+cov_df$ETH = ETH
+
+View(cov_df)
+
+write.csv(cov_df, file.path(workpath, "output","covariance_result.csv"), row.names = FALSE)
